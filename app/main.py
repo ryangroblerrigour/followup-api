@@ -35,12 +35,13 @@ PROMPT_TEMPLATE = (
 async def generate_followup(req: FollowUpRequest):
     prompt = PROMPT_TEMPLATE.format(orig=req.original_question, ans=req.user_answer)
     try:
-        resp = openai.ChatCompletion.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=60
-        )
+        resp = openai.chat.completions.create(
+    model=MODEL,
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.7,
+    max_tokens=60
+)
+
         question = resp.choices[0].message.content.strip()
         if not question.endswith("?"):
             question += "?"
