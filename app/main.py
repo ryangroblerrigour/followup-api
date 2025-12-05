@@ -1,15 +1,23 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 import os
 from dotenv import load_dotenv
-import openai
+from openai import OpenAI
 
 # Load local environment variables from .env (development only)
 load_dotenv()
 
 # Configure OpenAI client
-openai.api_key = os.getenv("OPENAI_API_KEY")
-MODEL = os.getenv("LLM_MODEL", "gpt-4-turbo")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    # Fail fast at startup if key is missing – easier to debug than runtime errors
+    raise RuntimeError("OPENAI_API_KEY is not set")
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Default model – you can override with LLM_MODEL env var
+MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
 class FollowUpRequest(BaseModel):
     original_question: str
@@ -21,30 +29,15 @@ class FollowUpResponse(BaseModel):
 app = FastAPI(
     title="Follow-Up Question API",
     description="Generates probing follow-up questions based on user answers",
-    version="0.1.0"
+    version="0.2.0",
 )
 
-PROMPT_TEMPLATE = (
-    "You are a research assistant. Given:\n"
-    "Original question: \"{orig}\"\n"
-    "User’s answer: \"{ans}\"\n\n"
-    "Generate one clear, polite, open-ended follow-up question that asks why they answered that way."
-)
-
-@app.post("/followup", response_model=FollowUpResponse)
-async def generate_followup(req: FollowUpRequest):
-    prompt = PROMPT_TEMPLATE.format(orig=req.original_question, ans=req.user_answer)
-    try:
-        resp = openai.chat.completions.create(
-    model=MODEL,
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0.7,
-    max_tokens=60
-)
-
-        question = resp.choices[0].message.content.strip()
-        if not question.endswith("?"):
-            question += "?"
-        return FollowUpResponse(follow_up_question=question)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+SYSTEM_PROMPT = (
+    "You are a market research moderator working on a study about car brands.\n"
+    "Your job is to ask ONE short, open-ended follow-up question that digs deeper into "
+    "WHY the respondent answered the way they did.\n\n"
+    "Rules:\n"
+    "- Ask about their reasons for choosing or feeling that way about the car brand.\n"
+    "- Focus on things like features, reliability, price, image, past experience, or how it fits their needs.\n"
+    "- Only ONE question, 6–25 words, neutral and non-leading.\n"
+    "- Do not ask multiple questions in on
